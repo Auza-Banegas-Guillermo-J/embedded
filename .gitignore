@@ -1,4 +1,8 @@
 Tiva/*
+Tiva/examples/*
+Tiva/examples/boards/*
+Tiva/examples/boards/ek-tm4c1294xl/*
+
 !Tiva/examples/
 !Tiva/examples/boards/
 !Tiva/examples/boards/ek-tm4c1294xl/
