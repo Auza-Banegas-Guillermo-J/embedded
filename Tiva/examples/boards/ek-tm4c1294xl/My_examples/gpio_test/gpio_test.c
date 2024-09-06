@@ -15,8 +15,9 @@ IMT UCB 2024 S2
 
 //Macros
 #define CLOCK 120000000
-#define NLEDS (GPIO_PIN_0 | GPIO_PIN_1)
+#define NLEDS (GPIO_PIN_0 | GPIO_PIN_1) 
 #define FLEDS (GPIO_PIN_0 | GPIO_PIN_4)
+#define PINS (GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7)
 
 //GPIOPinWrite(uint32_t ui32Port, uint8_t ui8Pins, uint8_t ui8Val)
 //#define GPIO_PIN_0              0x00000001 
@@ -55,6 +56,8 @@ SysCtlDelay(uint32_t ui32Count)
 
 void Delay(uint32_t);
 void peripheralStartup(void);
+void gpioOn(uint32_t, uint32_t);
+void gpioOff(uint32_t, uint32_t);
 
 #ifdef DEBUG
 void
@@ -64,32 +67,31 @@ __error__(char *pcFilename, uint32_t ui32Line)
 }
 #endif
 
-int
-main(void)
+int32_t reg_val;
+
+int main(void)
 {
     SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480), CLOCK);
     peripheralStartup();
-    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0);
-    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_1);
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_4);
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0|GPIO_PIN_1);
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4);
     while(1)
     {
-        GPIOPinWrite(GPIO_PORTN_BASE, NLEDS, GPIO_PIN_1);
+        gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
         Delay(500);
-        GPIOPinWrite(GPIO_PORTN_BASE, NLEDS, GPIO_PIN_0 | GPIO_INT_PIN_1);
+        gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
         Delay(500);
-        GPIOPinWrite(GPIO_PORTF_BASE, FLEDS, GPIO_PIN_4);
+        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
         Delay(500);
-        GPIOPinWrite(GPIO_PORTF_BASE, FLEDS, GPIO_PIN_0 | GPIO_INT_PIN_4);
+        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
         Delay(500);
-        //GPIOPinWrite(GPIO_PORTF_BASE, FLEDS, !GPIO_PIN_1);
+        gpioOff(GPIO_PORTF_BASE,GPIO_PIN_0);
         Delay(500);
-        //GPIOPinWrite(GPIO_PORTF_BASE, FLEDS, 0x00);
+        gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4);
         Delay(500);
-        //GPIOPinWrite(GPIO_PORTN_BASE, NLEDS, GPIO_PIN_1);
+        gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0);
         Delay(500);
-        //GPIOPinWrite(GPIO_PORTN_BASE, NLEDS, 0x00);
+        gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
         Delay(500);
     }
 }
@@ -103,4 +105,19 @@ void peripheralStartup(void){
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION)){;}
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){;}
+}
+
+void gpioOn(uint32_t port, uint32_t pin){
+    reg_val = GPIOPinRead(port,PINS);
+    GPIOPinWrite(port, PINS, reg_val|pin);
+}
+
+void gpioOff(uint32_t port, uint32_t pin){
+    reg_val = GPIOPinRead(port,PINS);
+    GPIOPinWrite(port, PINS, reg_val&(~pin));
+}
+
+bool gpioRead(uint32_t port, uint32_t pin){
+    reg_val = GPIOPinRead(port,PINS);
+    
 }
