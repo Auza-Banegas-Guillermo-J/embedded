@@ -58,6 +58,7 @@ void Delay(uint32_t);
 void peripheralStartup(void);
 void gpioOn(uint32_t, uint32_t);
 void gpioOff(uint32_t, uint32_t);
+void gpioReset(uint32_t);
 
 #ifdef DEBUG
 void
@@ -71,28 +72,88 @@ int32_t reg_val;
 
 int main(void)
 {
+    int8_t counter = 0;
+    char flag = 0;
+    int32_t pinMatrix[4] = {GPIO_PIN_1, GPIO_PIN_0, GPIO_PIN_4, GPIO_PIN_0};
+    int32_t portMatrix[4] = {GPIO_PORTN_BASE, GPIO_PORTN_BASE, GPIO_PORTF_BASE, GPIO_PORTF_BASE};
     SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480), CLOCK);
     peripheralStartup();
+    GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE,GPIO_PIN_0|GPIO_PIN_1);
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0|GPIO_PIN_1);
     GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4);
+    GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0|GPIO_PIN_1,GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    gpioOn(portMatrix[counter],pinMatrix[counter]);
     while(1)
     {
+        if (flag==1){
+            switch (counter){
+                case 0:
+                    
+                    break;
+                case 1: 
+                    break;
+                case 2: 
+                    break;
+                case 3: 
+                    break;
+            }   
+        }
+        else if((GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0)&&(flag==0)){
+            Delay(250);
+            gpioReset(portMatrix[counter]);
+            counter++;
+            if(counter>3){counter=0;}
+            gpioOn(portMatrix[counter],pinMatrix[counter]);
+        }
+        else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
+            flag = 1;
+            for(int i=0; i<3; i++)
+            {
+                gpioOn(portMatrix[counter],pinMatrix[counter]);
+                Delay(750);
+                gpioOff(portMatrix[counter],pinMatrix[counter]);
+                Delay(750);
+            }
+        }
+        /*
+        if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0){
+            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
+            Delay(500);
+            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
+            Delay(500);
+            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
+            Delay(500);
+            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
+            Delay(500);
+            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_0);
+            Delay(500);
+            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4);
+            Delay(500);
+            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0);
+            Delay(500);
+            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
+            Delay(500);
+        }
+        else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
+            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0|GPIO_PIN_1);
+            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4|GPIO_PIN_0);
+            Delay(2000);
+            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0|GPIO_PIN_1);
+            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4|GPIO_PIN_0);
+        }*/
+        /*
         gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
-        Delay(500);
+        Delay(1000);
         gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
-        Delay(500);
+        Delay(1000);
         gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
-        Delay(500);
+        Delay(1000);
         gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
-        Delay(500);
-        gpioOff(GPIO_PORTF_BASE,GPIO_PIN_0);
-        Delay(500);
-        gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4);
-        Delay(500);
-        gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0);
-        Delay(500);
-        gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
-        Delay(500);
+        Delay(1000);
+        gpioReset(GPIO_PORTN_BASE);
+        gpioReset(GPIO_PORTF_BASE);
+        Delay(1000);
+        */
     }
 }
 
@@ -103,8 +164,10 @@ void Delay(uint32_t time){
 void peripheralStartup(void){
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION)){;}
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){;}
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ)){;}
 }
 
 void gpioOn(uint32_t port, uint32_t pin){
@@ -117,7 +180,7 @@ void gpioOff(uint32_t port, uint32_t pin){
     GPIOPinWrite(port, PINS, reg_val&(~pin));
 }
 
-bool gpioRead(uint32_t port, uint32_t pin){
+void gpioReset(uint32_t port){
     reg_val = GPIOPinRead(port,PINS);
-    
+    GPIOPinWrite(port, PINS, 0x0);
 }
