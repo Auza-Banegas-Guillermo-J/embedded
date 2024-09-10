@@ -101,9 +101,25 @@ int main(void)
                     }
                     break;
                 case 1:
-                    
+                    gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
+                    Delay(2000);
+                    gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
+                    Delay(2000);
+                    gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
+                    Delay(2000);
+                    gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
+                    Delay(2000);
+                    gpioOff(GPIO_PORTF_BASE,GPIO_PIN_0);
+                    Delay(2000);
+                    gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4);
+                    Delay(2000);
+                    gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0);
+                    Delay(2000);
+                    gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
+                    Delay(2000);
                     break;
                 case 2: 
+                    
                     break;
                 case 3: 
                     break;
@@ -126,45 +142,6 @@ int main(void)
                 Delay(750);
             }
         }
-        /*
-        if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0){
-            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
-            Delay(500);
-            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
-            Delay(500);
-            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
-            Delay(500);
-            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
-            Delay(500);
-            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_0);
-            Delay(500);
-            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4);
-            Delay(500);
-            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0);
-            Delay(500);
-            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
-            Delay(500);
-        }
-        else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
-            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0|GPIO_PIN_1);
-            gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4|GPIO_PIN_0);
-            Delay(2000);
-            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_0|GPIO_PIN_1);
-            gpioOff(GPIO_PORTF_BASE,GPIO_PIN_4|GPIO_PIN_0);
-        }*/
-        /*
-        gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
-        Delay(1000);
-        gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
-        Delay(1000);
-        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
-        Delay(1000);
-        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
-        Delay(1000);
-        gpioReset(GPIO_PORTN_BASE);
-        gpioReset(GPIO_PORTF_BASE);
-        Delay(1000);
-        */
     }
 }
 
