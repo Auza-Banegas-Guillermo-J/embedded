@@ -122,10 +122,10 @@ int main(void)
                     for (int count = 0; count < 16; count++) {
                         for (int bit = 0; bit < 4; bit++) {
                             if (count & (1 << bit)) {
-                                gpioOn(portMatrix[bit], pinMatrix[bit]);
+                                gpioOn(portMatrix[3-bit], pinMatrix[3-bit]);
                             }
                             else {
-                            gpioOff(portMatrix[bit], pinMatrix[bit]);
+                            gpioOff(portMatrix[3-bit], pinMatrix[3-bit]);
                             }
                         }
                         Delay(1000);
