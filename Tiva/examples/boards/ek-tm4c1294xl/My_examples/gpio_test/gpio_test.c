@@ -73,6 +73,7 @@ int32_t reg_val;
 int main(void)
 {
     int8_t counter = 0;
+    int8_t auxcounter = 0;
     char flag = 0;
     int32_t pinMatrix[4] = {GPIO_PIN_1, GPIO_PIN_0, GPIO_PIN_4, GPIO_PIN_0};
     int32_t portMatrix[4] = {GPIO_PORTN_BASE, GPIO_PORTN_BASE, GPIO_PORTF_BASE, GPIO_PORTF_BASE};
@@ -88,9 +89,19 @@ int main(void)
         if (flag==1){
             switch (counter){
                 case 0:
-                    
+                    gpioOn(portMatrix[auxcounter],pinMatrix[auxcounter]);
+                    if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0){
+                        Delay(250);
+                        if(auxcounter<=2){auxcounter++;}
+                    }
+                    else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
+                       Delay(250);
+                        gpioOff(portMatrix[auxcounter],pinMatrix[auxcounter]);
+                        if(auxcounter>=1){auxcounter--;}
+                    }
                     break;
-                case 1: 
+                case 1:
+                    
                     break;
                 case 2: 
                     break;
