@@ -119,7 +119,17 @@ int main(void)
                     Delay(2000);
                     break;
                 case 2: 
-                    
+                    for (int count = 0; count < 16; count++) {
+                        for (int bit = 0; bit < 4; bit++) {
+                            if (count & (1 << bit)) {
+                                gpioOn(portMatrix[bit], pinMatrix[bit]);
+                            }
+                            else {
+                            gpioOff(portMatrix[bit], pinMatrix[bit]);
+                            }
+                        }
+                        Delay(1000);
+                    }
                     break;
                 case 3: 
                     break;
