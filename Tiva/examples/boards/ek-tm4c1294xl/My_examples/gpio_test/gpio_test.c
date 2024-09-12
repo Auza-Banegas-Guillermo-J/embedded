@@ -11,7 +11,6 @@ IMT UCB 2024 S2
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
 #include "driverlib/sysctl.h"
-#include "driverlib/timer.h"
 
 //Macros
 #define CLOCK 120000000
@@ -68,7 +67,7 @@ __error__(char *pcFilename, uint32_t ui32Line)
 }
 #endif
 
-int32_t reg_val;
+volatile int32_t reg_val;
 
 int main(void)
 {
