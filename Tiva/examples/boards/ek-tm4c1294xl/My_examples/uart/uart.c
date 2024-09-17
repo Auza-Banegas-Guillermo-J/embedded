@@ -7,10 +7,13 @@ IMT UCB 2024 S2
 // Libraries
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "inc/hw_types.h"
+
+#include "utils/uartstdio.h"
 
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
@@ -20,6 +23,7 @@ IMT UCB 2024 S2
 #include "driverlib/pin_map.h"
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
+#include "driverlib/uart.h"
 
 //Macros
 #define CLOCK 120000000
@@ -27,10 +31,14 @@ IMT UCB 2024 S2
 
 volatile int32_t reg_val;
 
+char data[100];
+char valid[10]="buzzer";
+
 void Delay(uint32_t);
 void peripheralStartup(void);
 
 void interruptGuille(void);
+void ConfigureUART(void);
 
 void gpioOn(uint32_t, uint32_t);
 void gpioOff(uint32_t, uint32_t);
@@ -45,14 +53,15 @@ int32_t portMatrix[4] = {GPIO_PORTN_BASE, GPIO_PORTN_BASE, GPIO_PORTF_BASE, GPIO
 
 int main(void)
 {
-    uint32_t miliseconds = 500;
+    uint32_t miliseconds = 100;
     g_ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
                                              SYSCTL_OSC_MAIN |
                                              SYSCTL_USE_PLL |
                                              SYSCTL_CFG_VCO_240), 120000000);
 
     peripheralStartup();
-
+    ConfigureUART();
+    
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE,GPIO_PIN_1|GPIO_PIN_0);
     GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4);
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE,GPIO_PIN_0|GPIO_PIN_1);
@@ -69,19 +78,18 @@ int main(void)
     IntMasterEnable();
     TimerEnable(TIMER0_BASE, TIMER_A);
     
+   gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0); 
     while(1){
-        if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0){
-            IntMasterDisable();
-            miliseconds = 500;
-            TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock/1000)*miliseconds - 1);
-            IntMasterEnable();
+        UARTgets(data, 100);
+        UARTprintf(data);
+        //UARTprintf("\n\r")
+        if(strcmp(data,valid) == 0){
+            UARTprintf("check\n\r");
+            gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
+            Delay(500);
+            gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
         }
-        else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
-            IntMasterDisable();
-            miliseconds = 2000;
-            TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock/1000)*miliseconds - 1);
-            IntMasterEnable();;
-        }
+
     }
 }
 
@@ -118,15 +126,26 @@ void gpioReset(uint32_t port){
 void interruptGuille(void)
 {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    for (int bit = 0; bit < 4; bit++) {
-        if (count & (1 << bit)) {
-            gpioOn(portMatrix[3-bit], pinMatrix[3-bit]);
-        }
-        else {
-            gpioOff(portMatrix[3-bit], pinMatrix[3-bit]);
-        }
+    if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)==0){
+        IntMasterDisable();
+        UARTprintf("Motor 1\n\r");
+        IntMasterEnable();
     }
-    IntMasterDisable();
-    count = (count<15) ? (count + 1) : 0;
-    IntMasterEnable();
+    else if(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_1)==0){
+        IntMasterDisable();
+        UARTprintf("Motor 2\n\r");
+        IntMasterEnable();    
+    }
+}
+
+void ConfigureUART(void)
+{
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    UARTStdioConfig(0, 115200, g_ui32SysClock);
 }

@@ -38,6 +38,11 @@ ROOT=../../../../..
 include ${ROOT}/makedefs
 
 #
+# Where to find source files that do not live in this directory.
+#
+VPATH=../../../../../utils
+
+#
 # Where to find header files that do not live in the source directory.
 #
 IPATH=../../../../..
@@ -63,13 +68,14 @@ ${COMPILER}:
 #
 # Rules for building the uart example.
 #
-${COMPILER}/uart.axf: ${COMPILER}/uart.o
 ${COMPILER}/uart.axf: ${COMPILER}/startup_${COMPILER}.o
+${COMPILER}/uart.axf: ${COMPILER}/uart.o
+${COMPILER}/uart.axf: ${COMPILER}/uartstdio.o
 ${COMPILER}/uart.axf: ${ROOT}/driverlib/${COMPILER}/libdriver.a
 ${COMPILER}/uart.axf: uart.ld
 SCATTERgcc_uart=uart.ld
 ENTRY_uart=ResetISR
-CFLAGSgcc=-DTARGET_IS_TM4C129_RA1
+CFLAGSgcc=-DTARGET_IS_TM4C129_RA2
 
 #
 # Include the automatically generated dependency files.
