@@ -86,7 +86,7 @@ int main(void)
         if(strcmp(data,valid) == 0){
             UARTprintf("check\n\r");
             gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
-            Delay(500);
+            Delay(1500);
             gpioOff(GPIO_PORTN_BASE,GPIO_PIN_1);
         }
 
