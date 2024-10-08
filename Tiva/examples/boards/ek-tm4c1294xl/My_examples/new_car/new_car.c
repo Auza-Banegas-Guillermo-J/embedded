@@ -35,6 +35,9 @@ volatile int32_t reg_val;
 uint32_t value;
 
 int32_t width = 135;
+char data[100];
+
+void remove_chars(char*);
 
 void interruptGuille(void);
 void ConfigureUART(void);
@@ -116,6 +119,47 @@ int main(void)
         if(width<50){width=50;}
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, width);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, width);
+        UARTgets(data, 100);
+        UARTprintf(data);
+        remove_chars(data);    
+        switch (data[0]){
+            case 'w':
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+                gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_1);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
+                break;
+            case 'a':
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+                gpioOn(GPIO_PORTN_BASE,GPIO_PIN_0);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_1);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
+                break;
+            case 's':
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+                gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
+                break;
+            case 'd':
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+                gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+                gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
+                break;
+            case '0':
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+        }
         Delay(10);
     }
 }
@@ -184,6 +228,18 @@ void ConfigureUART(void)
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
 
     UARTStdioConfig(0, 115200, g_ui32SysClock);
+}
+
+void remove_chars(char* data){
+    int i, j = 0;
+    int len = strlen(data);
+    
+    for (i = 0; i < len; i++) {
+        if ((data[i]!='\r') && (data[i]!='\n')){
+            data[j++] = data[i];
+        }
+    }
+    data[j] = '\0';
 }
 
 /*
