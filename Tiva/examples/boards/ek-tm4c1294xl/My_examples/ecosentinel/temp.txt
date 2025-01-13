@@ -1,0 +1,391 @@
+        /*
+        if (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0) == 0) {
+            if (!timerRunning_A) {
+                startTimer(g_ui32SysClock, &timeMotor_A, &timerRunning_A, TIMER0_BASE, INT_TIMER0A, timerInterruptHandler_A);
+                GPIOPinWrite(GPIO_PORTN_BASE, PINS, 0x00);
+                GPIOPinWrite(GPIO_PORTF_BASE, PINS, 0x00);
+            }
+        }
+        else if (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0) {
+            if (timerRunning_A) {
+                stopTimer(TIMER0_BASE, &timerRunning_A, INT_TIMER0A);
+                updateLEDs(timeMotor_A / 1000);
+            }
+        }*//*
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 1);
+        for(int i=1; i<400; i++){
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, i);
+            delay(10);
+        }
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 1);
+        for(int i=1; i<400; i++){
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, i);
+            delay(10);
+        }*/
+        /*
+        ADCProcessorTrigger(ADC0_BASE, 3);
+        while (!ADCIntStatus(ADC0_BASE, 3, false)) {;}
+        ADCIntClear(ADC0_BASE, 3);
+        ADCSequenceDataGet(ADC0_BASE, 3, &value[0]);
+        width[0] = (int)(((float)value[0] / 4095.0) * 399.0);
+        if (width[0] < 5) { width[0] = 5; }
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, (uint32_t)width[0]);
+
+        ADCProcessorTrigger(ADC0_BASE, 2);
+        while (!ADCIntStatus(ADC0_BASE, 2, false)) {;}
+        ADCIntClear(ADC0_BASE, 2);
+        ADCSequenceDataGet(ADC0_BASE, 2, &value[1]);
+        width[1] = (int)(((float)value[1] / 4095.0) * 399.0);
+        if (width[1] < 5) { width[1] = 5; }
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (uint32_t)width[1]);
+
+        delay(10);
+        */
+
+void updateLEDs(uint32_t seconds){
+    uint32_t ledsToTurnOn = (seconds > MAX_LEDS) ? MAX_LEDS : seconds;
+
+    for (uint32_t i = 0; i < ledsToTurnOn; i++) {
+        gpioOn(portMatrix[i], pinMatrix[i]);
+    }
+}
+
+------------------------------------------------------------------------------
+
+/* 
+EcoSentinel Project
+Guillermo Javier Auza Banegas
+Embedded systems II
+IMT UCB 2024 S2
+*/
+
+// Libraries
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+
+#include "inc/hw_memmap.h"
+#include "inc/hw_ints.h"
+#include "inc/hw_types.h"
+#include "inc/hw_nvic.h"
+
+#include "utils/uartstdio.h"
+
+#include "driverlib/debug.h"
+#include "driverlib/gpio.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/timer.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/pin_map.h"
+#include "driverlib/rom.h"
+#include "driverlib/rom_map.h"
+#include "driverlib/uart.h"
+#include "driverlib/pwm.h"
+#include "driverlib/adc.h"
+#include "driverlib/fpu.h"
+
+// Macros
+#define CLOCK 120000000
+#define PINS (GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7)
+#define MAX_LEDS 4
+
+#define PPR 11
+#define REDUCTION_RATIO 26
+#define RAD_TO_RPM 9.5492
+
+// Global Variables
+volatile uint32_t timeMotor_A = 0;
+volatile uint32_t timeMotor_B = 0;
+
+volatile uint32_t encoderCount_A = 0;
+volatile uint32_t encoderCount_B = 0;
+
+volatile float rpmMotor_A = 0.0;
+volatile float rpmMotor_B = 0.0;
+
+bool timerRunning_A = false;
+bool timerRunning_B = false;
+
+bool ledTimer_A = 0;
+bool ledTimer_B = 0;
+
+volatile int32_t reg_val;
+
+uint32_t setpoint = 0;
+
+uint32_t value[7];
+int32_t width[7] = {1,1,1,1,1,1,1};
+
+uint32_t pinMatrix[4] = {GPIO_PIN_1, GPIO_PIN_0, GPIO_PIN_4, GPIO_PIN_0};
+uint32_t portMatrix[4] = {GPIO_PORTN_BASE, GPIO_PORTN_BASE, GPIO_PORTF_BASE, GPIO_PORTF_BASE};
+
+// Function Prototypes
+void delay(uint32_t);
+void peripheralStartup(void);
+
+void startTimer(uint32_t, volatile uint32_t*, bool*, uint32_t, uint32_t, void (*)(void));
+void stopTimer(uint32_t, bool*, uint32_t);
+
+void timerInterruptHandler_A(void);
+void timerInterruptHandler_B(void);
+
+void motorEncoder_A(void);
+void motorEncoder_B(void);
+
+void gpioOn(uint32_t, uint32_t);
+
+//Class Definitions
+typedef struct {
+    float kp, ki, kd;
+    float setpoint, error, prevError;
+    float integral, derivative, dt;
+    float output;
+} PIDController;
+
+float calculatePID(PIDController*, float);
+
+PIDController pidMotor_A = {1.0, 0.01, 0.1, 100.0, 0, 0, 0, 0, 100.0, 1};
+PIDController pidMotor_B = {1.0, 0.01, 0.1, 100.0, 0, 0, 0, 0, 100.0, 1};
+
+// Main Function
+int main(void) {
+
+    uint32_t g_ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
+                                                    SYSCTL_OSC_MAIN |
+                                                     SYSCTL_USE_PLL |
+                                                SYSCTL_CFG_VCO_240), CLOCK);
+
+    peripheralStartup();
+
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE,GPIO_PIN_1|GPIO_PIN_0);
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4);
+    GPIOPinTypeGPIOOutput(GPIO_PORTL_BASE, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3);
+
+    //GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, GPIO_PIN_3);
+    //GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_5);
+
+    GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    
+    GPIOPinConfigure(GPIO_PF1_M0PWM1);
+    GPIOPinConfigure(GPIO_PF2_M0PWM2);
+    
+    GPIOPinTypePWM(GPIO_PORTF_BASE, GPIO_PIN_1);
+    GPIOPinTypePWM(GPIO_PORTF_BASE, GPIO_PIN_2);
+
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_1);
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
+
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_0, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
+    PWMGenPeriodSet(PWM0_BASE,PWM_GEN_0,400);
+
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_1, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, 400);
+
+    PWMGenEnable(PWM0_BASE,PWM_GEN_0);
+    PWMOutputState(PWM0_BASE,PWM_OUT_1_BIT,true);
+
+    PWMGenEnable(PWM0_BASE, PWM_GEN_1);
+    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+
+    ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
+    ADCSequenceConfigure(ADC0_BASE, 2, ADC_TRIGGER_PROCESSOR, 0);
+
+    ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH2);
+    ADCSequenceStepConfigure(ADC0_BASE, 2, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH0);
+
+    ADCSequenceEnable(ADC0_BASE,3);
+    ADCIntClear(ADC0_BASE, 3);
+
+    ADCSequenceEnable(ADC0_BASE, 2);
+    ADCIntClear(ADC0_BASE, 2);
+
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock / 100) - 1);
+
+    TimerIntRegister(TIMER0_BASE, TIMER_A, timerInterruptHandler_A);
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    IntEnable(INT_TIMER0A);
+    IntPrioritySet(INT_TIMER0A, 0);
+    TimerEnable(TIMER0_BASE, TIMER_A);
+
+    TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER1_BASE, TIMER_A, (g_ui32SysClock / 100) - 1);
+
+    TimerIntRegister(TIMER1_BASE, TIMER_A, timerInterruptHandler_B);
+    TimerIntEnable(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
+    IntEnable(INT_TIMER1A);
+    IntPrioritySet(INT_TIMER1A, 0);
+    TimerEnable(TIMER1_BASE, TIMER_A);
+
+    GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, GPIO_PIN_2);
+    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU); // Try GPIO_PIN_TYPE_STD if pull-up is an issue
+
+    GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_4);
+    GPIOPadConfigSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU); // Try GPIO_PIN_TYPE_STD
+
+    // Interrupt Configuration
+    GPIOIntTypeSet(GPIO_PORTB_BASE, GPIO_PIN_2, GPIO_BOTH_EDGES); // Or GPIO_RISING_EDGE or GPIO_BOTH_EDGES for testing
+    GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_BOTH_EDGES); 
+
+    GPIOIntEnable(GPIO_PORTB_BASE, GPIO_PIN_2);
+    GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);
+
+    // Register and Enable Interrupts
+    GPIOIntRegister(GPIO_PORTB_BASE, motorEncoder_B); 
+    GPIOIntRegister(GPIO_PORTM_BASE, motorEncoder_A);
+
+    IntEnable(INT_GPIOB);
+    IntEnable(INT_GPIOM);
+
+    IntMasterEnable();
+
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    UARTStdioConfig(0, 115200, g_ui32SysClock);
+
+    GPIOPinWrite(GPIO_PORTF_BASE, PINS, 0x00);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 1);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 1);
+
+    GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x00);
+    
+    gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+    gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
+    while (1){
+        delay(1000);
+        gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
+        delay(1000);
+        GPIOPinWrite(GPIO_PORTN_BASE,PINS, 0x00);
+        UARTprintf("Alive... ");
+        //UARTprintf("PID_A : %f \nPID_B : %f \n",(float)calculatePID(&pidMotor_A, rpmMotor_A),(float)calculatePID(&pidMotor_B, rpmMotor_B));
+        //UARTprintf("Encoder A: %u\n", encoderCount_A);
+        //UARTprintf("Encoder B: %u\n", encoderCount_B);
+    }
+}
+
+void peripheralStartup(void) {
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOL);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    //SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOL)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER0)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER1)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB)){;}
+    //while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_UART0)){;}
+}
+
+void startTimer(uint32_t clock, volatile uint32_t *cronometer, bool *isRunning,
+                 uint32_t timerBase, uint32_t interruptTimer, void (*interruptHandler)(void)){
+    *cronometer = 0;
+    *isRunning = true;
+
+    IntEnable(interruptTimer);
+    TimerIntEnable(timerBase, TIMER_TIMA_TIMEOUT);
+    TimerEnable(timerBase, TIMER_A);
+}
+
+void stopTimer(uint32_t timerBase, bool *isRunning, uint32_t interruptTimer) {
+    *isRunning = false;
+
+    IntDisable(interruptTimer);
+    TimerIntDisable(timerBase, TIMER_TIMA_TIMEOUT);
+    TimerDisable(timerBase, TIMER_A);
+}
+
+void timerInterruptHandler_A(void) {
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    if(1){
+        timeMotor_A++;
+
+        rpmMotor_A = (float)(encoderCount_A * 60 * 100) / (PPR * REDUCTION_RATIO);
+        encoderCount_A = 0;
+
+        float pwm_output_A = calculatePID(&pidMotor_A, rpmMotor_A);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, (uint32_t)pwm_output_A);
+    }
+    if(!ledTimer_A){
+        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_4);
+        ledTimer_A = 1;
+    }
+    //UARTprintf("Check_Timer_1");
+}
+
+void timerInterruptHandler_B(void) {
+    TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
+    if(1){
+        timeMotor_B++;
+
+        rpmMotor_B = (float)(encoderCount_B * 60 * 1000) / (PPR * REDUCTION_RATIO);
+        encoderCount_B = 0;
+
+        float pwm_output_B = calculatePID(&pidMotor_B, rpmMotor_B);
+        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (uint32_t)pwm_output_B);
+    }
+    if(!ledTimer_B){
+        gpioOn(GPIO_PORTF_BASE,GPIO_PIN_0);
+        ledTimer_B = 1;
+    }
+    //UARTprintf("Check_Timer_2");
+}
+
+void motorEncoder_A(void){
+    //GPIOIntClear(GPIO_PORTC_BASE, GPIO_PIN_7);
+    GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_4);
+    encoderCount_A++;
+    UARTprintf("Encoder A check\n");
+} 
+
+void motorEncoder_B(void){
+    GPIOIntClear(GPIO_PORTB_BASE, GPIO_PIN_2);
+    //GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_5);
+    encoderCount_B++;
+    UARTprintf("Encoder B check\n");
+} 
+
+void gpioOn(uint32_t port, uint32_t pin){
+    reg_val = GPIOPinRead(port,PINS);
+    GPIOPinWrite(port, PINS, reg_val|pin);
+}
+
+void delay(uint32_t time){
+    SysCtlDelay((CLOCK/3000) * time);
+}
+
+float calculatePID(PIDController *pid, float current_value){
+    pid->error = pid->setpoint - current_value;
+    pid->integral += pid->error * pid->dt;
+    pid->derivative = (pid->error - pid->prevError) / pid->dt;
+
+    pid->output = (pid->kp * pid->error) + (pid->ki * pid->integral) + (pid->kd * pid->derivative);
+    pid->prevError = pid->error;
+
+    if (pid->output > 399) {
+        pid->output = 399;
+    } else if (pid->output < 1) {
+        pid->output = 1;
+    }
+    return pid->output;
+}

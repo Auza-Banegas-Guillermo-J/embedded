@@ -1,5 +1,4 @@
-gcc/new_car.o: new_car.c \
- /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdint.h \
+gcc/vision.o: vision.c /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdint.h \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdbool.h \
  /usr/include/newlib/string.h /usr/include/newlib/_ansi.h \
  /usr/include/newlib/newlib.h /usr/include/newlib/_newlib_version.h \

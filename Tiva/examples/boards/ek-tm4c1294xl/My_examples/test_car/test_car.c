@@ -54,8 +54,8 @@ void peripheralStartup(void);
 uint32_t g_ui32SysClock;
 uint32_t g_ui32Flags;
 
-short flag=0;
-short toggle=0;
+short toggle;
+short flag;
 
 int main(void)
 {
@@ -69,7 +69,7 @@ int main(void)
     ConfigureUART();
     
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE,GPIO_PIN_1|GPIO_PIN_0);
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4);
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0|GPIO_PIN_4|GPIO_PIN_3);
     GPIOPinTypeGPIOOutput(GPIO_PORTL_BASE,GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3);
 
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE,GPIO_PIN_0|GPIO_PIN_1);
@@ -98,7 +98,7 @@ int main(void)
     ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH2);
     ADCSequenceEnable(ADC0_BASE,3);
     ADCIntClear(ADC0_BASE, 3);
-
+    
     GPIOIntTypeSet(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_RISING_EDGE);
     IntRegister(INT_GPIOF, manualGuilleInterrupt);
     GPIOIntEnable(GPIO_PORTF_BASE, GPIO_PIN_2);
@@ -114,7 +114,7 @@ int main(void)
     TimerEnable(TIMER0_BASE, TIMER_A);
 
     IntMasterEnable();
-    
+
     gpioReset(GPIO_PORTL_BASE);
 
     while(1){
@@ -122,16 +122,16 @@ int main(void)
         while(!ADCIntStatus(ADC0_BASE, 3, false)){;}
         ADCIntClear(ADC0_BASE, 3);
         ADCSequenceDataGet(ADC0_BASE, 3, &value);
-        width = (int)((((float)(value)/4095) * 400)-1);
-        //width=399;
+        //width = (int)((((float)value/4095) * 400)-1);
+        width = 399;
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, width);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, width);
         UARTgets(data, 100);
         UARTprintf(data);
-        remove_chars(data);    
+        remove_chars(data);
         switch (data[0]){
             case 'w':
-                flag=0;
+                flag = 0;
                 gpioReset(GPIO_PORTN_BASE);
                 gpioReset(GPIO_PORTF_BASE);
                 gpioReset(GPIO_PORTL_BASE);
@@ -140,7 +140,7 @@ int main(void)
                 gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
                 break;
             case 'a':
-                flag=0;
+                flag = 0;
                 gpioReset(GPIO_PORTN_BASE);
                 gpioReset(GPIO_PORTF_BASE);
                 gpioReset(GPIO_PORTL_BASE);
@@ -149,7 +149,7 @@ int main(void)
                 gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
                 break;
             case 's':
-                flag=0;
+                flag = 0;
                 gpioReset(GPIO_PORTN_BASE);
                 gpioReset(GPIO_PORTF_BASE);
                 gpioReset(GPIO_PORTL_BASE);
@@ -158,7 +158,7 @@ int main(void)
                 gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
                 break;
             case 'd':
-                flag=0;
+                flag = 1;
                 gpioReset(GPIO_PORTN_BASE);
                 gpioReset(GPIO_PORTF_BASE);
                 gpioReset(GPIO_PORTL_BASE);
@@ -167,11 +167,16 @@ int main(void)
                 gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
                 break;
             case '0':
+                flag = 0;
+                gpioReset(GPIO_PORTN_BASE);
+                gpioReset(GPIO_PORTF_BASE);
+                gpioReset(GPIO_PORTL_BASE);
+                break;
+            case 'v':
                 flag=0;
                 gpioReset(GPIO_PORTN_BASE);
                 gpioReset(GPIO_PORTF_BASE);
                 gpioReset(GPIO_PORTL_BASE);
-            case 'v':
                 HWREG(NVIC_SW_TRIG) = INT_GPIOF - 16;
             default:
                 break;
@@ -265,7 +270,7 @@ void manualGuilleInterrupt(){
     IntMasterDisable();
     gpioReset(GPIO_PORTL_BASE);
     gpioOn(GPIO_PORTF_BASE, GPIO_PIN_3);
-    delay(2000);
+    //delay(500);
     gpioOff(GPIO_PORTF_BASE, GPIO_PIN_3);
     IntMasterEnable();
 }

@@ -1,4 +1,4 @@
-gcc/new_car.o: new_car.c \
+gcc/ecosentinel.o: ecosentinel.c \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdint.h \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdbool.h \
  /usr/include/newlib/string.h /usr/include/newlib/_ansi.h \
@@ -10,13 +10,15 @@ gcc/new_car.o: new_car.c \
  /usr/include/newlib/sys/_types.h /usr/include/newlib/machine/_types.h \
  /usr/include/newlib/machine/_default_types.h \
  /usr/include/newlib/sys/lock.h /usr/include/newlib/sys/cdefs.h \
- /usr/include/newlib/sys/string.h ../../../../../inc/hw_memmap.h \
- ../../../../../inc/hw_ints.h ../../../../../inc/hw_types.h \
- ../../../../../inc/hw_nvic.h ../../../../../utils/uartstdio.h \
+ /usr/include/newlib/sys/string.h /usr/include/newlib/stdlib.h \
+ /usr/include/newlib/machine/stdlib.h /usr/include/newlib/math.h \
+ ../../../../../inc/hw_memmap.h ../../../../../inc/hw_ints.h \
+ ../../../../../inc/hw_types.h ../../../../../inc/hw_nvic.h \
+ ../../../../../utils/uartstdio.h \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdarg.h \
  ../../../../../driverlib/debug.h ../../../../../driverlib/gpio.h \
  ../../../../../driverlib/sysctl.h ../../../../../driverlib/timer.h \
  ../../../../../driverlib/interrupt.h ../../../../../driverlib/pin_map.h \
  ../../../../../driverlib/rom.h ../../../../../driverlib/rom_map.h \
  ../../../../../driverlib/uart.h ../../../../../driverlib/pwm.h \
- ../../../../../driverlib/adc.h
+ ../../../../../driverlib/adc.h ../../../../../driverlib/fpu.h

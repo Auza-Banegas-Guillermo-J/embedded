@@ -1,4 +1,4 @@
-gcc/new_car.o: new_car.c \
+gcc/test_car.o: test_car.c \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdint.h \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdbool.h \
  /usr/include/newlib/string.h /usr/include/newlib/_ansi.h \
@@ -12,7 +12,7 @@ gcc/new_car.o: new_car.c \
  /usr/include/newlib/sys/lock.h /usr/include/newlib/sys/cdefs.h \
  /usr/include/newlib/sys/string.h ../../../../../inc/hw_memmap.h \
  ../../../../../inc/hw_ints.h ../../../../../inc/hw_types.h \
- ../../../../../inc/hw_nvic.h ../../../../../utils/uartstdio.h \
+ ../../../../../utils/uartstdio.h \
  /usr/lib/gcc/arm-none-eabi/10.3.1/include/stdarg.h \
  ../../../../../driverlib/debug.h ../../../../../driverlib/gpio.h \
  ../../../../../driverlib/sysctl.h ../../../../../driverlib/timer.h \
