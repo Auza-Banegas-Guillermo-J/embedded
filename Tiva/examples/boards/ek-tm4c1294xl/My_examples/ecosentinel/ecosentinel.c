@@ -52,12 +52,23 @@ volatile uint32_t encoderCount_B = 0;
 volatile float rpmMotor_A = 0.0;
 volatile float rpmMotor_B = 0.0;
 
+const int filterLength = 3;
+
+float rpmHist_A[3] = {0};
+uint32_t filterIndex_A = 0; 
+
+float rpmHist_B[3] = {0};
+uint32_t filterIndex_B = 0; 
+
 bool allowMovement = 0;
 
 bool ledTimer_A = 0;
 bool ledTimer_B = 0;
 
 volatile int32_t reg_val;
+
+uint32_t minPulseWidth = 120000;
+uint32_t maxPulseWidth = 240000;
 
 uint32_t value[2];
 int32_t width[7] = {1,1,1,1,1,1,1};
@@ -83,18 +94,24 @@ void gpioOff(uint32_t, uint32_t);
 
 void uart2digit(void);
 
+void ConfigureServo(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
+void angle2pwm(uint32_t, uint32_t, float);
+
+float mediaMovil(float, float*, uint32_t*);
+
 //Class Definitions
 typedef struct {
-    float kp, ki, kd;
+    uint32_t kp, ki;
+    float kd;
     float setpoint, error, prevError;
     float integral, derivative, dt;
-    float output;
+    float output, prevMeasurement;
 } PIDController;
 
 float calculatePID(PIDController*, float);
 
-PIDController pidMotor_A = {2.325, 0.001, 0.0, 0.0, 0, 0, 0, 0, 100.0, 1}; //motor izquierdo
-PIDController pidMotor_B = {4.5, 0.001, 0.0, 0.0, 0, 0, 0, 0, 100.0, 1}; // motor derecho 
+PIDController pidMotor_A = {12000, 0.001, 10, 0.0, 0, 0, 0, 0, 1000, 1, 0}; //motor izquierdo
+PIDController pidMotor_B = {12000*1.225, 0.001, 10, 0.0, 0, 0, 0, 0, 1000, 1, 0}; // motor derecho 
 
 int percentageCoord_x=50, percentageCoord_y=50;
 short receiveIndex = 0; 
@@ -125,6 +142,7 @@ int main(void) {
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     
+    /*
     GPIOPinConfigure(GPIO_PF1_M0PWM1);
     GPIOPinConfigure(GPIO_PF2_M0PWM2);
     
@@ -145,6 +163,7 @@ int main(void) {
 
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+    */
 
     ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
     ADCSequenceConfigure(ADC0_BASE, 2, ADC_TRIGGER_PROCESSOR, 0);
@@ -159,7 +178,7 @@ int main(void) {
     ADCIntClear(ADC0_BASE, 2);
 
     TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock / 100) - 1);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock / 1000) - 1);
 
     TimerIntRegister(TIMER0_BASE, TIMER_A, timerInterruptHandler_A);
     TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
@@ -168,7 +187,7 @@ int main(void) {
     TimerEnable(TIMER0_BASE, TIMER_A);
 
     TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
-    TimerLoadSet(TIMER1_BASE, TIMER_A, (g_ui32SysClock / 100) - 1);
+    TimerLoadSet(TIMER1_BASE, TIMER_A, (g_ui32SysClock / 1000) - 1);
 
     TimerIntRegister(TIMER1_BASE, TIMER_A, timerInterruptHandler_B);
     TimerIntEnable(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
@@ -202,6 +221,20 @@ int main(void) {
 
     UARTStdioConfig(0, 115200, g_ui32SysClock);
 
+    ConfigureServo(PWM_GEN_0, PWM_OUT_1_BIT, GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PF1_M0PWM1, 50);
+    ConfigureServo(PWM_GEN_1, PWM_OUT_2_BIT, GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PF2_M0PWM2, 50);
+
+    //necesario hacerlo con los motores DC pq PF2 y PF3 comparten el PWM_GEN :) :) :)
+    // 5 hrs alv :,)
+
+    ConfigureServo(PWM_GEN_1, PWM_OUT_3_BIT, GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PF3_M0PWM3, 50);
+    ConfigureServo(PWM_GEN_2, PWM_OUT_4_BIT, GPIO_PORTG_BASE, GPIO_PIN_0, GPIO_PG0_M0PWM4, 50);
+    ConfigureServo(PWM_GEN_2, PWM_OUT_5_BIT, GPIO_PORTG_BASE, GPIO_PIN_1, GPIO_PG1_M0PWM5, 50);
+    ConfigureServo(PWM_GEN_3, PWM_OUT_6_BIT, GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PK4_M0PWM6, 50);
+
+    PWMOutputState(PWM0_BASE,PWM_OUT_1_BIT,true);
+    PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
+
     GPIOPinWrite(GPIO_PORTF_BASE, PINS, 0x00);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 1);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, 1);
@@ -215,10 +248,18 @@ int main(void) {
                pidMotor_A.error, pidMotor_A.integral, pidMotor_A.derivative, pidMotor_A.dt, pidMotor_A.output);
     UARTprintf("PID_B_INIT: error=%f, integral=%f, derivative=%f, dt=%f, output=%f\n",
                pidMotor_B.error, pidMotor_B.integral, pidMotor_B.derivative, pidMotor_B.dt, pidMotor_B.output);*/
+    UARTprintf("\n\nBooting UP!!!\n\n--------------------------------------------------------------\n\n");
+    delay(1000);
     uint32_t testValue = 10123;
     int testValue_2 = -10;
     UARTprintf("Test: %u\n", testValue);
     UARTprintf("Test: %d\n", abs(testValue_2));
+
+    //gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+    //gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
+
+    //PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, ((SysCtlClockGet()/50))/5);
+    //PWMOutputState(PWM0_BASE,PWM_OUT_2_BIT,true);
 
     /*
     uint32_t adcClock = 120000000 / 64;
@@ -229,13 +270,40 @@ int main(void) {
 
     //pidMotor_A.setpoint=100;
     //pidMotor_B.setpoint=100;
+    /*
+    PWMPulseWidthSet(PWM0_BASE,PWM_OUT_3,(uint32_t)(SysCtlClockGet()/500)*1.25);
+    PWMPulseWidthSet(PWM0_BASE,PWM_OUT_4,(uint32_t)(SysCtlClockGet()/500)*0.625);
+    PWMPulseWidthSet(PWM0_BASE,PWM_OUT_5,(uint32_t)(SysCtlClockGet()/500)*0.3125);
+    PWMPulseWidthSet(PWM0_BASE,PWM_OUT_6,(uint32_t)(SysCtlClockGet()/500)*0.15625);
+    PWMOutputState(PWM0_BASE,PWM_OUT_3_BIT,true);
+    PWMOutputState(PWM0_BASE,PWM_OUT_4_BIT,true);
+    PWMOutputState(PWM0_BASE,PWM_OUT_5_BIT,true);
+    PWMOutputState(PWM0_BASE,PWM_OUT_6_BIT,true);*/
+
+    /*
+    angle2pwm(PWM_OUT_3_BIT,PWM_OUT_3,-90);
+    angle2pwm(PWM_OUT_4_BIT,PWM_OUT_4,-45);
+    angle2pwm(PWM_OUT_5_BIT,PWM_OUT_5,45);
+    angle2pwm(PWM_OUT_6_BIT,PWM_OUT_6,90);
+    */
+
+    /*
+    gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+    gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
+    pidMotor_A.setpoint = 1.35;
+    pidMotor_B.setpoint = 1.35;*/
+
+    //UARTprintf("Arm porperly Written\n\n");
+    delay(1000);
+    UARTprintf("Starting main Algorithm...\n\n");
+    delay(1000);
     porcentage_x = 50.0;
     porcentage_y = 50.0;
     while (1){
         //gpioOn(GPIO_PORTN_BASE,GPIO_PIN_1);
-        delay(1000);
+        //delay(1000);
         //GPIOPinWrite(GPIO_PORTN_BASE,PINS, 0x00);
-        UARTprintf(".\n");
+        //UARTprintf(".\n");
 
         if(!GPIOPinRead(GPIO_PORTE_BASE,GPIO_PIN_4)==0){
             
@@ -268,11 +336,13 @@ int main(void) {
 
             //UARTprintf("Errores de centro :\n1 : %d\n2 : %d\n", (int)numericalError_x, (int)numericalError_y);
 
-            while(numericalError_x>5.0){
+            while(numericalError_x>4){
+                //UARTprintf("PWM motor A : %u\n",(uint32_t)calculatePID(&pidMotor_A, mediaMovil(rpmMotor_A,rpmHist_A,&filterIndex_A)));
+                /*
                 ADCProcessorTrigger(ADC0_BASE, 3);
                 while (!ADCIntStatus(ADC0_BASE, 3, false)) {;}
                 ADCIntClear(ADC0_BASE, 3);
-                ADCSequenceDataGet(ADC0_BASE, 3, &value[0]);
+                ADCSequenceDataGet(ADC0_BASE, 3, &value[0]);*/
 
                 uart2digit();
 
@@ -290,15 +360,46 @@ int main(void) {
                     gpioOn(GPIO_PORTL_BASE,GPIO_PIN_1);
                     gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
                 }
-                pidMotor_A.setpoint = 35;
-                pidMotor_B.setpoint = 35;
+                pidMotor_A.setpoint = 1.35;
+                pidMotor_B.setpoint = 1.35;
+                delay(100);
+                pidMotor_A.setpoint = 0;
+                pidMotor_B.setpoint = 0;
+                GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x0);
+                delay(50);
             }
             while(numericalError_y>5.0){
+                //UARTprintf("PWM motor B : %u\n",(uint32_t)calculatePID(&pidMotor_B, mediaMovil(rpmMotor_B,rpmHist_B,&filterIndex_B)));
+                /*
                 ADCProcessorTrigger(ADC0_BASE, 2);
                 while (!ADCIntStatus(ADC0_BASE, 2, false)) {;}
                 ADCIntClear(ADC0_BASE, 2);
-                ADCSequenceDataGet(ADC0_BASE, 2, &value[1]);
-
+                ADCSequenceDataGet(ADC0_BASE, 2, &value[1]);*/
+                error_x = percentageCoord_x - 50.0;
+                numericalError_x = abs(error_x);
+                while(numericalError_x>2){
+                    uart2digit();
+                    error_x = percentageCoord_x - 50.0;
+                    numericalError_x = abs(error_x);
+                    if(error_x>0)
+                    {
+                        UARTprintf("Girando izquierda\n");
+                        gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
+                        gpioOn(GPIO_PORTL_BASE,GPIO_PIN_2);
+                    }
+                    else{
+                        UARTprintf("Girando Derecha\n");
+                        gpioOn(GPIO_PORTL_BASE,GPIO_PIN_1);
+                        gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
+                    }
+                    pidMotor_A.setpoint = 1.35;
+                    pidMotor_B.setpoint = 1.35;
+                    delay(30);
+                    pidMotor_A.setpoint = 0;
+                    pidMotor_B.setpoint = 0;
+                    GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x0);
+                    delay(250);
+                }
                 uart2digit();
 
                 error_y = percentageCoord_y - 50.0;
@@ -318,12 +419,33 @@ int main(void) {
                     gpioOn(GPIO_PORTL_BASE,GPIO_PIN_0);
                     gpioOn(GPIO_PORTL_BASE,GPIO_PIN_3);
                 }
-                pidMotor_A.setpoint = 80;
-                pidMotor_B.setpoint = 80;
+                pidMotor_A.setpoint = 1.5;
+                pidMotor_B.setpoint = 1.5;
+                delay(250);
+                pidMotor_A.setpoint = 0;
+                pidMotor_B.setpoint = 0;
+                GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x0);
+                delay(10);
+            }
+            uart2digit();
+            error_x = percentageCoord_x - 50.0;
+            numericalError_x = abs(error_x);
+            error_y = percentageCoord_y - 50.0;
+            numericalError_y = abs(error_y);
+            if((numericalError_x<=2)&&(numericalError_y<=5)){
+                angle2pwm(PWM_OUT_3_BIT,PWM_OUT_3,-90);
+                angle2pwm(PWM_OUT_4_BIT,PWM_OUT_4,-45);
+                angle2pwm(PWM_OUT_5_BIT,PWM_OUT_5,45);
+                angle2pwm(PWM_OUT_6_BIT,PWM_OUT_6,90);
             }
             pidMotor_A.setpoint = 0;
             pidMotor_B.setpoint = 0;
-            GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x00);
+            GPIOPinWrite(GPIO_PORTL_BASE, PINS, 0x0);
+            delay(1000);
+            PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);
+            PWMOutputState(PWM0_BASE, PWM_OUT_4_BIT, false);
+            PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, false);
+            PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT, false);
         }
         /*
         if(numericalError_x>5.0){
@@ -366,9 +488,10 @@ void peripheralStartup(void) {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-    //SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOL)){;}
@@ -380,9 +503,10 @@ void peripheralStartup(void) {
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB)){;}
-    //while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){;}
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_UART0)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG)){;}
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){;}
 }
 
 void startTimer(uint32_t clock, volatile uint32_t *cronometer, bool *isRunning,
@@ -408,10 +532,10 @@ void timerInterruptHandler_A(void) {
     if(1){
         //timeMotor_A++;
 
-        rpmMotor_A = (float)(encoderCount_A * 60 * 100) / (PPR * REDUCTION_RATIO);
+        rpmMotor_A = (float)(encoderCount_A * 60 * 1000) / (PPR * REDUCTION_RATIO);
         encoderCount_A = 0;
 
-        float pwm_output_A = calculatePID(&pidMotor_A, rpmMotor_A);
+        float pwm_output_A = calculatePID(&pidMotor_A, mediaMovil(rpmMotor_A,rpmHist_A,&filterIndex_A));
         //UARTprintf("Effective PWM A : %u\n",(uint32_t)pwm_output_A);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, (uint32_t)pwm_output_A);
     }
@@ -427,10 +551,10 @@ void timerInterruptHandler_B(void) {
     if(1){
         //timeMotor_B++;
 
-        rpmMotor_B = (float)(encoderCount_B * 60 * 100) / (PPR * REDUCTION_RATIO);
+        rpmMotor_B = (float)(encoderCount_B * 60 * 1000) / (PPR * REDUCTION_RATIO);
         encoderCount_B = 0;
 
-        float pwm_output_B = calculatePID(&pidMotor_B, rpmMotor_B);
+        float pwm_output_B = calculatePID(&pidMotor_B, mediaMovil(rpmMotor_B,rpmHist_B,&filterIndex_B));
         //UARTprintf("Effective PWM B : %u\n",(uint32_t)pwm_output_B);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, (uint32_t)pwm_output_B);
     }
@@ -476,16 +600,15 @@ float calculatePID(PIDController *pid, float current_value){
 
     pid->output = (pid->kp * pid->error) + (pid->ki * pid->integral) + (pid->kd * pid->derivative);
     pid->prevError = pid->error;
+    /*
+    if (pid->integral > SysCtlClockGet()/2){
+        pid->integral = SysCtlClockGet()/2;
+    } else if (pid->integral < -SysCtlClockGet()/2){
+        pid->integral = -SysCtlClockGet()/2;
+    }*/
 
-    if (pid->integral>10){
-        pid->integral=0;
-    }
-
-    //UARTprintf("Debug: error=%f, integral=%f, derivative=%f, dt=%f, output=%f\n",
-    //           pid->error, pid->integral, pid->derivative, pid->dt, pid->output);
-
-    if (pid->output > 399) {
-        pid->output = 399;
+    if (pid->output > SysCtlClockGet() / 50) {
+        pid->output = SysCtlClockGet() / 50;
     } else if (pid->output < 1) {
         pid->output = 1;
     }
@@ -512,4 +635,40 @@ void uart2digit(void) {
     while(UARTCharsAvail(UART0_BASE)){
         UARTCharGetNonBlocking(UART0_BASE);
     }
+}
+
+void ConfigureServo(uint32_t pwmGen, uint32_t pwmOutBit, uint32_t gpioBase, uint32_t gpioPin, uint32_t gpioPinConfig, uint32_t targetPeriod){
+    
+    uint32_t pwmPeriod = SysCtlClockGet() / targetPeriod;
+
+    GPIOPinConfigure(gpioPinConfig);
+    GPIOPinTypePWM(gpioBase, gpioPin);
+
+    PWMGenConfigure(PWM0_BASE, pwmGen, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
+    PWMGenPeriodSet(PWM0_BASE, pwmGen, pwmPeriod);
+
+    PWMGenEnable(PWM0_BASE, pwmGen);
+    PWMOutputState(PWM0_BASE,pwmOutBit,false);
+    //PWMOutputState(PWM0_BASE,pwmOutBit,true);
+}
+
+void angle2pwm(uint32_t pwmOutBit, uint32_t pwmOut, float angle){
+    uint32_t pulseWidth = minPulseWidth + ((angle + 90) * (maxPulseWidth - minPulseWidth)) / 180;
+    PWMOutputState(PWM0_BASE, pwmOutBit, true);
+    PWMPulseWidthSet(PWM0_BASE, pwmOut, pulseWidth);
+}
+
+float mediaMovil(float rpm, float *historyPointer, uint32_t *indexPointer){
+    historyPointer[*indexPointer] = rpm;
+    (*indexPointer)++;
+
+    if (*indexPointer == filterLength) {
+        *indexPointer = 0;
+    }
+
+    float sum = 0.0;
+    for (int i = 0; i < filterLength; i++) {
+        sum += historyPointer[i];
+    }
+    return sum / filterLength;
 }
